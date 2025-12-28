@@ -6,7 +6,20 @@ const bodyParser = require('body-parser');
 // Initialize Express app
 const app = express();
 
-// Connect to MongoDB
+// IMPORTANT: Health check MUST be first, before other middleware
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+// Connect to MongoDB (async, don't block startup)
 const connectDB = require('./config/database');
 connectDB().catch(err => console.warn('DB error:', err.message));
 
@@ -15,31 +28,28 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// Serve static files
+// Serve static files from public directory
 app.use(express.static('public'));
+
+// Root route - serve index.html
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
 
 // API Routes
 app.use('/api/members', require('./routes/members'));
 app.use('/api/attendance', require('./routes/attendance'));
 
-// Root route
+// API info route
 app.get('/api', (req, res) => {
     res.json({ 
         message: '🎯 Lurung Angkers Check-in API',
         version: '2.1.0',
         endpoints: {
+            health: '/api/health',
             members: '/api/members',
             attendance: '/api/attendance'
         }
-    });
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        database: 'Connected'
     });
 });
 
@@ -75,8 +85,7 @@ console.log(`
 ╚═══════════════════════════════════════════════════╝
 `);
 
-// FIXED: Listen to all interfaces (0.0.0.0) for cloud deployment
-// DO NOT bind to 127.0.0.1 - it won't work on Railway/Render/Heroku!
+// Listen to all interfaces (0.0.0.0) for cloud deployment
 app.listen(PORT, () => {
     console.log('✅ Server is running on port ' + PORT);
     console.log('✅ Ready to accept connections');
